@@ -12,23 +12,26 @@ namespace GeoMultiplier
 
     public class GlobalSettings
     {
-        public float overallMultiplier;
-        public float smallGeoMultiplier;
-        public float mediumGeoMultiplier;
-        public float largeGeoMultiplier;
+        public float generalMultiplier = 1f;
+        public float smallGeoMultiplier = 1f;
+        public float mediumGeoMultiplier = 1f;
+        public float largeGeoMultiplier = 1f;
         public bool roundingMode;
+        public bool keepShadeGeo = false;
     }
 
-    public class GeoMultiplier : Mod, ICustomMenuMod, IGlobalSettings<GlobalSettings>
+    public class EasierGeoEconomy : Mod, ICustomMenuMod, IGlobalSettings<GlobalSettings>
     {
-        public GeoMultiplier() : base("GeoMultiplier") { }
+        public EasierGeoEconomy() : base("EasierGeoEconomy") { }
         public override string GetVersion() => "0.1";
         public static GlobalSettings GS = new GlobalSettings();
         private Menu MenuRef;
+        private int shadeGeo;
+
         public override void Initialize()
         {
             On.HeroController.AddGeo += AddGeo;
-            //ModHooks.SetPlayerIntHook += PlayerIntSet;
+            ModHooks.AfterPlayerDeadHook += AfterPlayerDead;
         }
 
         public void AddGeo(On.HeroController.orig_AddGeo orig, HeroController self, int amount)
@@ -37,16 +40,16 @@ namespace GeoMultiplier
             Log($"Vanilla added amount: {amount}");
             if (amount == 1)
             {
-                Log($"multiplied is {amount * GS.smallGeoMultiplier * GS.overallMultiplier}, small multiplier: {GS.smallGeoMultiplier}, overal multiplier: {GS.overallMultiplier}");
-                orig(self, Rounding(amount * GS.smallGeoMultiplier * GS.overallMultiplier));
+                Log($"multiplied is {amount * GS.smallGeoMultiplier * GS.generalMultiplier}, small multiplier: {GS.smallGeoMultiplier}, overal multiplier: {GS.generalMultiplier}");
+                orig(self, Rounding(amount * GS.smallGeoMultiplier * GS.generalMultiplier));
             }
             else if (amount == 5)
             {
-                orig(self, Rounding(amount * GS.mediumGeoMultiplier * GS.overallMultiplier));
+                orig(self, Rounding(amount * GS.mediumGeoMultiplier * GS.generalMultiplier));
             }
             else if (amount == 25)
             {
-                orig(self, Rounding(amount * GS.largeGeoMultiplier * GS.overallMultiplier));
+                orig(self, Rounding(amount * GS.largeGeoMultiplier * GS.generalMultiplier));
             }
             else
             {
@@ -54,6 +57,14 @@ namespace GeoMultiplier
             }
         }
 
+        public void AfterPlayerDead()
+        {
+            if (!GS.keepShadeGeo) return;
+            PlayerData pd = PlayerData.instance;
+            shadeGeo = pd.GetVariable<int>("geoPool");
+            pd.SetVariable<int>("geo", shadeGeo);
+            pd.SetVariable<int>("geoPool", 0);
+        }
         public MenuScreen GetMenuScreen(MenuScreen modListMenu, ModToggleDelegates? modtoggledelegates)
         {
             MenuRef ??= new Menu(
@@ -61,21 +72,21 @@ namespace GeoMultiplier
                         elements: new Element[]
                         {
                         new HorizontalOption(
-                            name: "Round up or down",
-                            description: "Rounding up means 1.1 gets rounded to 2",
-                            values: new [] { "Round up", "Round down" },
+                            name: "Keep Geo",
+                            description: "Keep geo upon death. The shade spawns regardless",
+                            values: new [] { "Yes", "No" },
                             applySetting: index =>
                             {
-                                GS.roundingMode = index == 0; //"yes" is the 0th index in the values array
+                                GS.keepShadeGeo = index == 0;
                             },
-                            loadSetting: () => GS.roundingMode ? 0 : 1), //return 0 ("Yes") if active and 1 ("No") if false
+                            loadSetting: () => GS.keepShadeGeo ? 0 : 1),
                         new CustomSlider(
-                            name: "Overall Multiplier",
+                            name: "General Multiplier",
                             storeValue: val => // to store the value when the slider is changed by user
                             {
-                                GS.overallMultiplier = (float) val;
+                                GS.generalMultiplier = (float) val;
                             },
-                            loadValue: () => GS.overallMultiplier, //to load the value on menu creation
+                            loadValue: () => GS.generalMultiplier, //to load the value on menu creation
                             minValue: 0,
                             maxValue: 5,
                             wholeNumbers: false
@@ -115,7 +126,16 @@ namespace GeoMultiplier
                             minValue: 0,
                             maxValue: 5,
                             wholeNumbers: false
-                            )
+                            ),
+                        new HorizontalOption(
+                            name: "Round up or down",
+                            description: "Rounding up means 1.1 gets rounded to 2",
+                            values: new [] { "Round up", "Round down" },
+                            applySetting: index =>
+                            {
+                                GS.roundingMode = index == 0;
+                            },
+                            loadSetting: () => GS.roundingMode ? 0 : 1)
                         }
 
             );
